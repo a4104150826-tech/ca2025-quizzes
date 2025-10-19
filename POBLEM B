@@ -1,0 +1,181 @@
+#PROBLEM B
+.data
+str1:.string ":produce value"
+str2:.string "but encodes back to"
+n:.asciz "\n"
+str3:.string ":value"
+str4:.string "<= previous_value"
+msg:.asciz "\n" 
+.text
+.globl main 
+main:
+    jal ra ,bool
+    li a7,1
+    ecall
+     li a7,10 
+    ecall
+clz: 
+    addi sp ,sp -16
+    sw ra ,12(sp)                
+    li t0,,16             #c = 16 n = 32 ,copy16 to s2
+    li t1,,32
+loop: 
+     beq t0 ,zero,end           # if c = 0 leave loop  
+     srl a1 ,a0, t0             #y = x>>c
+     beq a1 ,zero,decision       # if y =0 shift c>>1
+     sub t1 ,t1,t0               # n- = c
+     mv  a0 ,a1                 # x = y
+decision:
+    srli t0, t0 ,1
+    j loop 
+end:    
+     sub a0 ,t1 , a0          #n = n-x 
+     lw ra,12(sp)
+     addi,sp,sp,16
+     ret                       #return caller
+decode:
+    addi ,sp ,sp ,-16
+    sw ,ra,12(sp)
+    andi t0 ,a0,0x0f          #b mod 16 mantissa
+    srli t1,a0,4              #b/16 exponent
+    addi t2,t1,-15
+    sub t2,zero,t2     
+    li t3,0x7fff             #then we let 2^15=32768 is biggest step size we shift make it /2^n-1 and we finished the 2^e-1     
+    srl t3,t3,t2
+    slli t3,t3,4
+    sll t0,t0,t1
+    add a0,t0,t3           #we find d(b)leftand add offset we get decode
+    lw ra ,12(sp)
+    addi ,sp ,sp 16
+    ret
+encode:
+   addi,sp,sp,-16
+    sw ra,12(sp)
+    mv t5,a0
+    li t1,16
+    bltu t5,t1,small           #if 16>=value jump to end
+fex:
+    mv a0,t5
+    jal ra,clz
+    add t0 ,a0,zero
+    addi t0,t0,-31
+    sub t0,zero,t0         #31-clz(value) decision msb in which bit
+    addi t1,zero,-4
+    bltu t1,x0,tu0      # if msb<5 goto next loop
+    li t0,15
+    blt t0,t1,tu15     #if exp>15 goto nextloop
+    li t1,15
+tu0:
+    li t1 0
+    j nextf
+tu15:
+    li t1 15
+nextf:
+    li t2,1
+    sll t2,t2,t1
+    addi t2,t2,-1          #t1 is  exp
+    slli t2,t2,4        #find overflow
+adj:
+    sltu t0,zero,t1         #if wxp<=0 or value>=overflow
+    mv t4,t5
+    sltu  t3,t4,t2
+    and t0,t0,t3          #t0 is 2 condition  sucess
+    addi t3,zero,1 
+    bne t0,t3,fae
+    addi t2,t2,-16 
+    srli t2,t2,1
+    addi t1,t1,-1
+    beq t0 ,zero,adj
+fae:
+    addi t0,zero,15
+    bgeu t1, t0,fend
+    slli t2,t2,1
+    addi,t2,t2,16                   #find exact exp
+    bltu t5,t2,fend
+    addi,t1,t1,1
+    j fae
+fend:
+    sub t0,t5,t2
+    srl t0,t0,t1
+    slli t1,t1,4
+    andi t0,t0,0xf
+    add t3,t1,t0
+fin:
+    andi a0,t3,0xff
+    lw ra ,12(sp)
+    addi sp,sp ,16
+    ret
+small:
+    mv a0,t5
+    lw ra,12(sp)
+    addi sp,sp,16
+    ret   
+bool:
+    addi sp,sp ,-16
+    sw ra,8(sp)
+    li,s0,-1       #t0 is preious value
+    li,s1,1        # pass is ture ,t1
+    li,s2,0                 #t2 is fl
+    li,s3,256           #loop i<256
+confirm:
+    mv a0,s2              #fl = t2
+    andi a0,s2,0xff
+    jal ra,decode       
+    mv t5,a0
+    mv a0,t5               #value is t5
+    jal ra,encode
+    mv t6,a0              # fl2 is t6
+    andi t4,s2,0xff
+    andi t6,t6,0xff
+    beq t4,t6,ch1
+    li a0,0
+    mv a0,t2
+    li a7,1
+    ecall
+    la a0,str1
+    li a7,4
+    ecall
+    mv a0,t5
+    li a7,1
+    ecall
+    la a0,str2
+    li a7,4
+    ecall
+    mv a0,t6
+    li a7,1
+    ecall
+    la a0,n
+    li a7,4
+    ecall
+    li s1,0
+ch1:
+   blt s0,t5,ch2
+   li a0,0
+    mv a0,t2
+    li a7,1
+    ecall
+    la a0,str1
+    li a7,4
+    ecall
+    mv a0,t5
+    li a7,1
+    ecall
+    la a0,str2
+    li a7,4
+    ecall
+    mv a0,t6
+    li a7,1
+    ecall
+    la a0,n
+    li a7,4
+    ecall
+    li s1,0
+    
+ch2: 
+    mv s0,t5
+    addi,s2,s2,1
+    bltu s2,s3 ,confirm
+    mv a0,s1
+    lw ra ,8(sp)
+    addi sp,sp,16
+    ret
