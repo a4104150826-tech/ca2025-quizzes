@@ -1,0 +1,114 @@
+.data
+oddevenmask:.word 0x55555555
+twobitsmask:.word 0x33333333
+fourbitsmask:.word 0x0f0f0f0f
+eightbitsmask:.word 0x00ff00ff  
+testdata:.word  43261596, 2147483644 , 1084732  
+.text
+.globl main 
+main:
+    la a0,testdata
+    lw a0,0(a0)
+    la t0,oddevenmask
+    lw t0,0(t0)
+    la t1,twobitsmask
+    lw t1,0(t1)
+    la t2,fourbitsmask
+    lw t2,0(t2)
+    la t3,eightbitsmask
+    lw t3,0(t3)
+    srli t4,a0,1
+    and t4,t4,t0
+    and t5,a0,t0
+    slli t5,t5,1
+    or a0,t5,t4
+    srli t4,a0,2
+    and t4,t4,t1
+    and t5,a0,t1
+    slli t5,t5,2
+    or a0,t5,t4
+    srli t4,a0,4
+    and t4,t4,t2
+    and t5,a0,t2
+    slli t5,t5,4
+    or a0,t5,t4
+    srli t4,a0,8
+    and t4,t4,t3
+    and t5,a0,t3
+    slli t5,t5,8
+    or a0,t5,t4
+    srli t4,a0,16
+    slli t5,a0,16
+    or a0,t4,t5
+    li a7,1
+    ecall
+    la a0,testdata
+    lw a0,4(a0)
+    la t0,oddevenmask
+    lw t0,0(t0)
+    la t1,twobitsmask
+    lw t1,0(t1)
+    la t2,fourbitsmask
+    lw t2,0(t2)
+    la t3,eightbitsmask
+    lw t3,0(t3)
+    srli t4,a0,1
+    and t4,t4,t0
+    and t5,a0,t0
+    slli t5,t5,1
+    or a0,t5,t4
+    srli t4,a0,2
+    and t4,t4,t1
+    and t5,a0,t1
+    slli t5,t5,2
+    or a0,t5,t4
+    srli t4,a0,4
+    and t4,t4,t2
+    and t5,a0,t2
+    slli t5,t5,4
+    or a0,t5,t4
+    srli t4,a0,8
+    and t4,t4,t3
+    and t5,a0,t3
+    slli t5,t5,8
+    or a0,t5,t4
+    srli t4,a0,16
+    slli t5,a0,16
+    or a0,t4,t5
+    li a7,1
+    ecall
+    la a0,testdata
+    lw a0,8(a0)
+    la t0,oddevenmask
+    lw t0,0(t0)
+    la t1,twobitsmask
+    lw t1,0(t1)
+    la t2,fourbitsmask
+    lw t2,0(t2)
+    la t3,eightbitsmask
+    lw t3,0(t3)
+    srli t4,a0,1
+    and t4,t4,t0
+    and t5,a0,t0
+    slli t5,t5,1
+    or a0,t5,t4
+    srli t4,a0,2
+    and t4,t4,t1
+    and t5,a0,t1
+    slli t5,t5,2
+    or a0,t5,t4
+    srli t4,a0,4
+    and t4,t4,t2
+    and t5,a0,t2
+    slli t5,t5,4
+    or a0,t5,t4
+    srli t4,a0,8
+    and t4,t4,t3
+    and t5,a0,t3
+    slli t5,t5,8
+    or a0,t5,t4
+    srli t4,a0,16
+    slli t5,a0,16
+    or a0,t4,t5
+    li a7,1
+    ecall
