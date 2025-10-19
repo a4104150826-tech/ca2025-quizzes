@@ -1,0 +1,643 @@
+#problem 3
+.data
+smask:.half 0x8000
+emask:.half 0x7f80
+mmask:.half 0x007f            #all unsigned
+ebias:.word 127
+nan:.half 0x7fc0
+bzero:.half 0x0000
+    
+.text
+.globl main 
+main:
+    
+    li a0,0xff23
+    li a1,0x0345
+    jal add
+    li t6,0xffff
+    and a0,a0,t6
+    slli a0,a0,16
+    li a7,2
+    ecall
+    li a0 ,0xff23
+    li a1,0x0345
+    jal mul
+    li t6,0xffff
+    and a0,a0,t6
+    slli a0,a0,16
+    li a7,2
+    ecall
+    li a0 ,0xff23
+    li a1,0x0345
+    jal div
+    li t6,0xffff
+    and a0,a0,t6
+    slli a0,a0,16
+    li a7,2
+    ecall
+    li a0,0x3f80
+    jal sqrt0 
+    li t6,0xffff
+    and a0,a0,t6
+    slli a0,a0,16
+    li a7,2
+    ecall
+    li a7,10
+    ecall
+    
+isnan:
+    addi sp,sp,-16
+    sw ra ,12(sp)
+    la t1,emask
+    lhu t0,0(t1)
+    and t1,a0,t0
+    srli t1,t1,7
+    sltiu t2,t1,0xff           #把平移後的a.bit exp跟0xff堆比果如小於就取0
+    xori t2,t2,0x01             #not so,if !(t1<0xff) 1 t1<0xff 0 
+    la t1,mmask
+    lhu t0,0(t1)
+    and t3,a0,t0                #mantissa produce 
+    sltu t3,zero,t3              #mantissa!=0 1
+    and a0,t2,t3
+    lw ra ,12(sp)
+    addi sp,sp,16
+    ret 
+isinf:
+    addi sp,sp,-16
+    sw ra ,12(sp)
+    la t1,emask
+    lhu t0,0(t1)
+    and t1,a0,t0
+    srli t1,t1,7
+    sltiu t2,t1,0xff           #把平移後的a.bit exp跟0xff堆比果如小於就取0
+    xori t2,t2,0x01             #not so,if !(t1<0xff) 1 t1<0xff 0 
+    la t1,mmask
+    lhu t0,0(t1)
+    and t3,a0,t0           #mantisa produce
+    sltu t3,zero,t3              #mantissa!=0 1
+    xori t3,t3,1
+    and a0,t2,t3
+    lw ra ,12(sp)
+    addi sp,sp,16
+    ret 
+iszero:
+    addi sp,sp,-16
+    sw ra ,12(sp)
+    li t0,0x7fff
+    and t1,a0,t0
+    sltu t1,zero,t1
+    xori a0,t1,0x01
+    lw ra,12(sp)
+    addi sp,sp,16
+    ret
+f322bf16:
+    addi sp,sp,-16
+    sw ra ,12(sp)      
+    mv t0,a0   
+    srli t2,a0,23           #現在抓她後8位如果是0xff就把原數字為移16做邏輯位移
+    andi t2,t2,0xff
+    li t1,0xff
+    beq t2,t1,q
+    srli t0,a0,16
+    andi t0,t0,1
+    li t1,0x7fff
+    add t0,t0,t1
+    add t0,t0,a0
+q:
+    srli a0,t0,16
+    lw ra,12(sp)
+    addi sp,sp,16
+    ret    
+b162f32:
+    addi sp,sp,-16
+    sw ra ,12(sp)
+    slli a0,a0,16
+    lw ra ,12(sp)
+    addi sp,sp,16
+    ret
+unpackbf16:
+    srli t0,a0,15                #sign a = t0
+    andi t0,t0,1
+    srli t1,a1,15                #sign b = t1
+    andi t1,t1,1
+    srli t2,a0,7                 #exp a= t2
+    andi t2,t2,0xff
+    srli t3,a1,7                 #exp a= t3
+    andi t3,t3,0xff
+    andi t4,a0,0x7f               #mantissa a=t4
+    andi t5,a1,0x7f               #mantissa b=t5
+    mv s0,t0 
+    mv s1,t1
+    mv s2,t2
+    mv s3,t3
+    mv s4,t4
+    mv s5,t5
+    ret
+add:
+    addi sp,sp,-48
+    sw ra ,12(sp)
+    sw s0,0(sp)
+    sw s1,4(sp)
+    sw s2,8(sp)
+    sw s3,16(sp)
+    sw s4,20(sp)
+    sw s5,24(sp)
+    sw a0,28(sp)
+    sw a1,32(sp)
+    jal ra,unpackbf16
+    li t0,0xff
+    bne s2,t0,other
+    bne s4,zero,reta
+    bne s3,t0,reta
+    sltu t1,x0,s5
+    xor t2,s0,s1
+    sltiu t2,t2,1
+    or t3,t1,t2
+    bne t3,x0,retb
+    li a0,0x7fc0
+    j last
+other:
+    li t0,255
+    bne s3,t0,add1          # if wxpb==0xff
+    j retb
+add1:
+    bne s2,x0,add2
+    beq s4,x0,retb             #if(exp!=0&&!mantb!0)
+add2:
+    bne s3,x0,x80
+    beq s5,x0,reta         #if(exp!=0&&!mantb!0)
+x80:
+    beq s2,x0,x802
+    ori s4,s4,128     
+x802:  
+    beq s3,x0,doother
+    ori s5,s5,128
+doother:  
+    sub t0,s2,s3                #t0 is exp diff
+    mv t6,t0
+    bge x0,t0,expdif1            
+    mv t1,s2                    #t1 is result exp
+    li t2,8
+    blt t2,t0,reta
+    srl s5,s5,t0
+    j sign
+expdif1:  
+    beq t6,x0,expdif2
+    mv t1,s3
+    li t2,-8
+    blt t0,t2,retb
+    sub t0,x0,t0
+    srl s4,s4,t0
+    j sign
+expdif2:  
+    mv t1,s2
+    j sign
+sign:
+    bne s0,s1,sign2
+    mv t2,s0               #result sign =signa t2,result sign
+    add t3,s4,s5         #reslut mant =t3
+    andi t4,t3,0x100
+    beq t4,x0,psign
+    srli t3,t3,1
+    addi t1,t1,1
+    li t5,0xff
+    blt t1,t5,psign
+    slli t4,t2,15
+    li t5,0x7f80
+    or a0,t4,t5
+    j last
+psign:
+    slli t4,t2,15
+    andi t5,t1,0xff
+    slli t5,t5,7
+    andi t6,t3,0x7f
+    or   t4,t4,t5
+    or   a0,t4,t6
+    j    last
+sign2:
+    blt s4,s5,bch2
+    mv t2,s0
+    sub t3,s4,s5
+    j almost
+bch2:
+    mv t2,s1
+    sub t3,s5,s4
+almost:
+    beq t3,x0,ret0
+    j slt
+slt:
+    loop:
+    andi t4,t3,0x80
+    bne t4,x0,gg
+    slli t3,t3,1
+    addi t1,t1,-1
+    bge zero,t1,ret0
+    j loop
+gg:
+    slli t4,t2,15
+    andi t5,t1,0xff
+    slli t5,t5,7
+    andi t6,t3,0x7f
+    or t4,t4,t5
+    or a0,t4,t6
+    j last
+reta:
+    lw a0,28(sp)  
+    j last
+retb: 
+    lw a0,32(sp)
+    j last
+ret0:
+    li a0,0
+    j last
+last:
+    lw ra ,12(sp)
+    lw s0,0(sp)
+    lw s1,4(sp)
+    lw s2,8(sp)
+    lw s3,16(sp)
+    lw s4,20(sp)
+    lw s5,24(sp)  
+    addi sp,sp,48
+    ret
+sub:
+    addi sp,sp,-16
+    sw ra,12(sp)
+    la t1,smask
+    lhu t1,0(t1)
+    xor a1,a1,t1
+    jal ra ,add
+    lw ra,12(sp)
+    addi sp,sp,16
+    ret
+mul:
+    addi sp,sp,-48
+    sw ra ,12(sp)
+    sw s0,0(sp)
+    sw s1,4(sp)
+    sw s2,8(sp)
+    sw s3,16(sp)
+    sw s4,20(sp)
+    sw s5,24(sp)
+    sw a0, 28(sp)
+    sw a1,32(sp)
+    jal ra,unpackbf16
+    xor t0,s0,s1                  #t0 is reult sign
+    li t1,0xff
+    bne s2,t1,mult2
+    bne s4,x0,mreta
+    bne s3,x0,mult1
+    beq s5,x0,retn
+mult1:
+    slli t2,t0,15
+    li t1,0x7f80
+    or a0,t1,t2
+    j multend
+mult2:
+    bne s3,t1,mult3
+    bne s5,x0,mretb
+    bne s2,x0,mult1
+    beq s4,x0,retn
+mult3:        
+    or t1,s2,s4
+    beq t1,x0,mret0
+    or t1,s3,s5
+    beq t1,x0,mret0
+mult4:
+    mv t2,x0            #expadjust=0
+    beq s2,x0,mloop
+    j else
+mloop:
+    andi t1,s4,0x80
+    bne t1,x0,expa1
+    slli s4,s4,1
+    addi t2,t2,-1
+    j mloop
+    
+expa1:
+    li t1,1
+    mv s2,t1
+    j else
+else:
+    ori s4,s4,0x80
+mult5:
+    beq s3,x0,mloop1
+    j else1
+mloop1:
+    andi t1,s5,0x80
+    bne t1,x0,expb1
+    slli s5,s5,1
+    addi t2,t2,-1
+    j mloop1
+    
+expb1:
+    li t1,1
+    mv s3,t1
+    j else1
+else1:
+    ori s5,s5,0x80
+newm:
+    mv t5,s4
+    mv t1,s5
+    mv t6,x0
+muloop:
+    andi t3,t1,1
+    beq t3,x0,nadd
+    add t6,t6,t5                   #t6 is reult mant
+nadd:
+    srli t1,t1,1
+    slli t5,t5,1
+    bne t1,x0,muloop
+reltexp:
+    add t5,s2,s3
+    addi t5,t5,-127
+    add t5,t5,t2                  #t5 is reslt exp
+findmant:
+    li t1,0x8000
+    and t1,t6,t1
+    beq t1,x0,felse
+    srli t6,t6,8
+    andi t6,t6,0x7f
+    addi t5,t5,1
+    j findexp
+felse:
+    srli t6,t6,7
+    andi t6,t6,0x7f
+findexp:
+    li t1,0xff
+    blt t5,t1,elsep
+    slli t0,t0,15
+    li t1,0x7f80
+    or a0,t0,t1
+    j multend
+elsep:
+    blt x0,t5,mlast
+    li t1,-6
+    blt t5,t1,mnext
+    li t1,1
+    sub t1,t1,t5
+    srl t6,t6,t1
+    mv t5,x0
+    j mlast
+mnext:
+    slli a0,t0,15
+    j multend
+mlast:
+    slli t0,t0,15
+    andi t6,t6,0x7f
+    andi t5,t5,0xff
+    slli t5,t5,7
+    or t0,t0,t5
+    or a0,t0,t6
+    j multend
+mreta:
+    lw a0, 28(sp)
+    j multend
+mretb:
+    lw a0, 32(sp)
+    j multend
+retn:
+    li a0,0x7fc0
+    j multend
+mret0:
+    slli a0,t0,15
+    j multend
+multend:
+    lw ra ,12(sp)
+    lw s0,0(sp)
+    lw s1,4(sp)
+    lw s2,8(sp)
+    lw s3,16(sp)
+    lw s4,20(sp)
+    lw s5,24(sp)  
+    addi sp,sp,48
+    ret
+div:
+    addi sp,sp,-48
+    sw ra ,12(sp)
+    sw s0,0(sp)
+    sw s1,4(sp)
+    sw s2,8(sp)
+    sw s3,16(sp)
+    sw s4,20(sp)
+    sw s5,24(sp)
+    sw a0,28(sp)
+    sw a1,32(sp)
+    jal ra,unpackbf16
+    xor t0,s0,s1                  #t0 is reult sign
+    li t1,0xff
+    bne s3,t1,div2
+    bne s5,x0,dretb
+    bne s2,t1,nextd
+    beq s4,x0,dret0
+    j nextd
+nextd:
+    slli a0,t0,15
+    j divend
+div2:
+    bne s3,x0,div3
+    bne s5,x0,div3
+    bne s2,x0,ret1nf
+    beq s4,x0,dret0
+    j ret1nf
+div3:
+    bne s2,t1,div4
+    bne s4,x0,dreta
+    slli t0,t0,15
+    li t1,0x7f80
+    or a0,t0,t1
+    j divend
+div4:
+    bne s2,x0,div5
+    bne s4,x0,div5
+    j nextd
+div5:
+    beq x0,s2,div6
+    ori s4,s4,0x80
+div6:
+    beq x0,s3,dpset
+    ori s5,s5,0x80
+dpset:
+    slli t3,s4,15               #t3 is dividend
+    mv t4,s5                     #t4 is divisor
+    mv t5,x0                     #t5 is qotient
+    mv t1,x0
+    li t2,16
+dloop:
+    slli t5,t5,1
+    sub t6,x0,t1
+    addi t6,t6,15
+    srl t6,t4,t6
+    blt t3,t6,divjump
+    sub t6,x0,t1
+    addi t6,t6,15
+    srl t6,t4,t6
+    sub t3,t3,t6
+    ori t5,t5,1
+    j divjump
+divjump: 
+    addi t1,t1,1
+    blt t1,t2,dloop
+chexp:
+    sub t1,s2,s3       #t1 is reslt exp
+    addi t1,t1,127
+    bne s2,x0,chexp2
+    addi t1,t1,-1 
+    j chexp2
+chexp2:
+    bne s3,x0,qucheck
+    addi t1,t1,1
+    j qucheck
+qucheck:
+    li t2,0x8000
+    and t2,t5,t2
+    bne t2,x0,rl8
+qucheck2:
+    li t3,1
+    bge t3,t1,rl8
+    slli t5,t5,1
+    addi t1,t1,-1
+    li t2,0x8000
+    and t2,t5,t2
+    beq t2,x0,qucheck2
+rl8:
+    srli t5,t5,8
+andq:
+    andi t5,t5,0x7f
+lastcheck:
+    li t3,0xff
+    bge t1,t3,ret1nf
+    bge x0,t1,nextd
+    slli t0,t0,15
+    andi t1,t1,0xff
+    slli t1,t1,7
+    andi t5,t5,0x7f
+    or t0,t0,t1
+    or a0,t0,t5
+    j divend
+dreta:
+    lw a0,28(sp)
+    j divend        
+dretb:    
+    lw a0,32(sp)
+    j divend
+dret0:
+    la t1,nan
+    lhu a0,0(t1)
+    j divend
+ret1nf:
+    slli t0,t0,15
+    li t1,0x7f80
+    or a0,t0,t1
+    j divend
+divend: 
+    lw ra ,12(sp)
+    lw s0,0(sp)
+    lw s1,4(sp)
+    lw s2,8(sp)
+    lw s3,16(sp)
+    lw s4,20(sp)
+    lw s5,24(sp)  
+    addi sp,sp,48
+    ret
+sqrt0:
+    addi sp,sp,-16
+    sw ra ,12(sp)    
+    srli t0,a0,15
+    andi t0,t0,1         # t0 is sign
+    srli t1,a0,7
+    andi t1,t1,0xff    #t1 is exp
+    andi t2,a0,0x7f    # t2 is mant
+hs:
+    li t3,0xff
+    bne t3,t1,sqr
+    bne t2,x0,sreta
+    j ches
+ches:
+    bne t0,x0,sretn
+    j sreta
+sqr:
+    bne t1,x0,sqrn
+    beq t2,x0,sret0
+    j sqrn
+sqrn:
+    bne t0,x0,sretn
+    j denorm
+denorm:
+    beq t1,x0,sret0
+    j algo
+algo:
+    addi t3,t1,-127           #t3 is e      
+    ori t4,t2,0x80          #t4 is m
+    andi t5,t3,1
+    bne t5,x0,selse
+    srai t5,t3,1
+    addi t6,t5,127        #t6 is new esp
+    j binarysearch
+selse:
+    slli t4,t4,1
+    addi t5,t3,-1
+    srai t5,t5,1
+    addi t6,t5,127
+binarysearch:
+    li t0 ,90
+    li t1,256
+    li t2,128
+sloop:
+    blt t1,t0,normlize
+    add t5,t0,t1
+    srli t5,t5,1
+    mul t3,t5,t5
+    srli t3,t3,7
+    blt t4,t3,selse2
+    mv t2,t5
+    addi t0,t5,1
+    j sloop
+selse2:
+    addi t1,t5,-1
+    j sloop
+normlize:
+    li t0,256
+    blt t2,t0,elseif
+    srli t2,t2,1
+    addi t6,t6,1
+    j sfmant
+elseif:
+    li t0,128
+    bge t2,t0,sfmant
+    li t0,1
+loopnew:
+    li t1,128
+    bge t2,t1,sfmant
+    bge t0,t6,sfmant
+    slli t2,t2,1
+    addi t6,t6,-1
+    j loopnew
+sfmant:
+    li t0,0xff
+    bge t6,t0,sret07f80
+    bge x0,t6,sret0
+    j retnew
+sreta:
+    mv a0,a0
+    j sqrtend
+sretn:
+    la t3,nan
+    lhu a0,0(t3)
+    j sqrtend
+sret0:
+    li a0,0
+    j sqrtend
+sret07f80:
+    li a0,0x7f80
+    j sqrtend
+retnew:
+    andi t1,t6,0xff
+    slli t1,t1,7
+    andi t2,t2,0x7f
+    or a0,t1,t2
+    j sqrtend
+sqrtend:
+    lw ra ,12(sp)
+    addi sp,sp,16
+    ret
